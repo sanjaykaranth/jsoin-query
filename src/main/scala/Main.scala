@@ -53,11 +53,14 @@ import com.typesafe.sslconfig.akka.AkkaSSLConfig
 final case class Labels( map: Map[String,Set[String]])
 final case class DocSet(docs: Set[String])
 final case class KeyWhiteList(numDocs:Int, keyWL: Set[String])
+final case class LabelswFlag( labels: Labels, numDocs: Int, fullDoc: Boolean)
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   implicit val labelsFormat = jsonFormat1(Labels)
   implicit val docsFormat = jsonFormat1(DocSet)
   implicit val keyWLFormat = jsonFormat2(KeyWhiteList)
+  implicit val labelswFlagFormat = jsonFormat3(LabelswFlag)
+
 }
 
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
@@ -97,11 +100,11 @@ object Main extends Directives with JsonSupport{
       cors() {
       path("queryFromLabels") {
         post {
-          entity(as[Labels]) { (labels) =>
+          entity(as[LabelswFlag]) { (labels) =>
             complete {
 
               print("Searching..")
-              val docs = Search.searchDocs(mutable.HashMap(labels.map.toSeq:_*), 84)
+              val docs = Search.searchDocs(mutable.HashMap(labels.labels.map.toSeq:_*), labels.numDocs,labels.fullDoc)
               print("Done. Doc list:" + docs.toString)
 
               DocSet(docs)
@@ -272,7 +275,10 @@ object Utils {
 }
 object Search {
   import mutable.HashMap
-  def searchDocs(labels: HashMap[String, Set[String]], numDocs: Int): Set[String] = {
+  def searchDocs(labels: HashMap[String, Set[String]], numDocs: Int, fullDoc:Boolean =true): Set[String] = {
+
+    if(labels.isEmpty)
+      return Set()
 
     val c: MongoClient = MongoClient()
     val db: MongoDatabase = c.getDatabase("zw")
@@ -280,7 +286,10 @@ object Search {
     import MongoHelpers._
     val jsons: Seq[Value] = db.getCollection("sme").find().results().take(numDocs).map(d => ujson.read(d.toJson))
 
-    jsons.filter(searchDoc(_, labels)).map(_.toString) toSet
+    if(fullDoc)
+      jsons.filter(searchDoc(_, labels)).map(_.toString) toSet
+    else
+      jsons.filter(searchDoc(_, labels)).map(json => json("smeId").str) toSet
   }
 
   def searchDoc( json: Js.Value, labels: HashMap[String, Set[String]]): Boolean = {
