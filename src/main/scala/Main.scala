@@ -63,6 +63,10 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
 }
 
+object Consts {
+  val ignoreWords = Set( "machine", "and", "or", "the" )
+}
+
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 
 object Main extends Directives with JsonSupport{
@@ -256,7 +260,8 @@ object Utils {
   def labelQuery(q: String, trainFilePath: String): HashMap[String, Set[String]] = {
     import scala.io.Source
 
-    val tokens = q.split(" ").map(clean(_))
+    val tokens = q.split(" ").map(clean(_)).toSet.diff(Consts.ignoreWords)
+
     val json = ujson.read(Source.fromFile(trainFilePath).getLines.mkString)
 
     val labels: HashMap[String, Set[String]] = HashMap() //cat -> Set of instances
